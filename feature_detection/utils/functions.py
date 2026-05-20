@@ -33,13 +33,9 @@ def compute_harris_response(I: np.array, k: float = 0.06) -> Tuple[np.array]:
     C = cv2.GaussianBlur(src=Ixy, ksize=(3, 3), sigmaX=1)
 
     # Step 4: Compute the harris response with the determinant and the trace of T
-    T = np.array(
-        [[A, C],
-        [C, B]]
-        )
-    det = np.linalg.det(T.transpose(2, 3, 0, 1))
-    trace = A + B
-    trace = np.trace(T.transpose(2, 3, 0, 1), axis1=2, axis2=3)
+    det = A * B - C * C
+    trace = A + B 
+    
     R = det - k * trace**2
 
     return R, A, B, C, Idx, Idy
@@ -57,22 +53,22 @@ def detect_corners(R: np.array, threshold: float = 0.1) -> Tuple[np.array, np.ar
     Returns:
         A tuple of two 1D integer arrays containing the x and y coordinates of key-points in the image.
     """
-    # Step 1 (recommended): Pad the response image to facilitate vectorization
+    # Pad the response image to facilitate vectorization
+    R_padded = np.pad(R, pad_width=1, mode='constant', constant_values=0)
 
+    # Create one image for every offset in the 3x3 neighborhood
+    neighbors = [R_padded[i:i+R.shape[0], j:j+R.shape[1]] for i in range(3) for j in range(3)]
 
-    # Step 2 (recommended): Create one image for every offset in the 3x3 neighborhood
+    # Compute the greatest neighbor of every pixel
+    max_neighbors = np.maximum.reduce(neighbors)
 
+    # Compute a boolean image with only all key-points set to True
+    keypoints = (R > threshold) & (R == max_neighbors)
 
-    # Step 3 (recommended): Compute the greatest neighbor of every pixel
+    # Use np.nonzero to compute the locations of the key-points from the boolean image
+    y, x = np.nonzero(keypoints)
 
-
-    # Step 4 (recommended): Compute a boolean image with only all key-points set to True
-
-
-    # Step 5 (recommended): Use np.nonzero to compute the locations of the key-points from the boolean image
-
-
-    raise NotImplementedError
+    return x, y 
 
 
 def detect_edges(R: np.array, edge_threshold: float = -0.01) -> np.array:
@@ -88,18 +84,23 @@ def detect_edges(R: np.array, edge_threshold: float = -0.01) -> np.array:
         A boolean image with edge pixels set to True.
     """
     # Step 1 (recommended): Pad the response image to facilitate vectorization
-
+    R_padded = np.pad(R, pad_width=1, mode="constant", constant_values=0)
 
     # Step 2 (recommended): Calculate significant response pixels
-
+    significant = R <= edge_threshold
 
     # Step 3 (recommended): Create two images with the smaller x-axis and y-axis neighbors respectively
-
+    left  = R_padded[1:-1, 0:-2]   # offset (0, -1)
+    right = R_padded[1:-1, 2:]     # offset (0, +1)
+    up    = R_padded[0:-2, 1:-1]   # offset (-1, 0)
+    down  = R_padded[2:,   1:-1]   # offset (+1, 0)
 
     # Step 4 (recommended): Calculate pixels that are lower than either their x-axis or y-axis neighbors
-
+    min_x = (R < left) & (R < right)
+    min_y = (R < up)   & (R < down)
+    axis_minimal = min_x | min_y
 
     # Step 5 (recommended): Calculate valid edge pixels by combining significant and axis_minimal pixels
+    edges = significant & axis_minimal
 
-
-    raise NotImplementedError
+    return edges
