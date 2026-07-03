@@ -1,17 +1,19 @@
 import numpy as np
 import cv2
 from tqdm import tqdm
-from typing import List, Tuple, Union, Dict
+from typing import Any, List, Tuple, Union, Dict, TypeAlias
+import numpy.typing as npt
 
 # These are typehints, they mostly make the code readable and testable
-t_points = np.array
-t_camera_parameters = np.array
-t_descriptors = np.array
-t_homography = np.array
-t_view = np.array
-t_img = np.array
-t_images = Dict[str, t_img]
-t_homographies = Dict[Tuple[str, str], t_homography]  # The keys are the keys of src and destination images
+t_array: TypeAlias = npt.NDArray[Any]
+t_points: TypeAlias = t_array
+t_camera_parameters: TypeAlias = t_array
+t_descriptors: TypeAlias = t_array
+t_homography: TypeAlias = t_array
+t_view: TypeAlias = t_array
+t_img: TypeAlias = t_array
+t_images: TypeAlias = Dict[str, t_img]
+t_homographies: TypeAlias = Dict[Tuple[str, str], t_homography]  # The keys are the keys of src and destination images
 
 np.set_printoptions(edgeitems=30, linewidth=180,
                     formatter=dict(float=lambda x: "%8.05f" % x))
@@ -89,21 +91,29 @@ def inliers_epipolar_constraint(p1: t_points, p2: t_points, F:t_homography, dist
     Returns:
         An array of indices of the points that satisfy the epipolar constraint.
     """
-    ## TODO 2.1 Find inliers (points that satisfy epipolar constraint) and  return their indices
-    # Step 1 - Convert points p1 and p2 from 2D to (2+1)D homogenous coordinates - [x, y] --> [x, y, 1] (2 lines)
+    # Find inliers (points that satisfy epipolar constraint) and  return their indices
+    # Convert points p1 and p2 from 2D to (2+1)D homogenous coordinates - [x, y] --> [x, y, 1]
+    p1_h = np.hstack([p1, np.ones((p1.shape[0], 1))]) # (N, 3)
+    p2_h = np.hstack([p2, np.ones((p2.shape[0], 1))]) # (N, 3)
 
-    # Step 2 - Compute the epipolar lines (1 line)
+    # Compute the epipolar lines
+    lines1 = p2_h @ F   # (N, 3)
+    lines2 = p1_h @ F.T # (N, 3)
 
-    # Step 3 - Normalize the epipolar lines (1 ~ 2 lines)
+    # Normalize the epipolar lines
+    lines1 /= np.linalg.norm(lines1[:, :2], axis=1, keepdims=True) # (N, 3)
+    lines2 /= np.linalg.norm(lines2[:, :2], axis=1, keepdims=True) # (N, 3)
 
-    # Step 4 - Compute the distances (1 line)
+    # Compute the distances
+    # compute distance along the rows --> get a column vector of shape (N,)
+    distances1 = np.abs(np.sum(lines1 * p1_h, axis=1))  # (N,)
+    distances2 = np.abs(np.sum(lines2 * p2_h, axis=1))  # (N,)
 
-    # Step 5 - Find inliers and return their indices (2 lines)
+    # Find inliers and return their indices
+    inliers = np.where((distances1 < distance_threshold) & (distances2 < distance_threshold))[0]
+    return inliers
 
-    raise NotImplemented
 
-
-# student function
 def compute_fundamental_matrix(points1: t_points, points2: t_points) -> np.array:
     """Computes the fundamental matrix given pairs of corresponding points in two images.
 
@@ -117,19 +127,31 @@ def compute_fundamental_matrix(points1: t_points, points2: t_points) -> np.array
     assert (len(points1) == 8), "Length of points1 should be 8!"
     assert (len(points2) == 8), "Length of points2 should be 8!"
 
-    A = np.ones((8, 9)).astype(int)
+    A = np.ones((8, 9))
 
-    # TODO 2.2 Construct the 8x9 matrix A.
+    # Construct the 8x9 matrix A.
+    for i in range(A.shape[0]):
+        px, py = points1[i]
+        qx, qy = points2[i]
+        A[i] = [px*qx, px*qy, px, py*qx, py*qy, py, qx, qy, 1]
 
-    # TODO 2.3 Solve Af = 0 and extract F using SVD
+    # Solve Af = 0 and extract F using SVD
+    _, _, Vt = np.linalg.svd(A)
+    F = Vt[-1].reshape(3, 3, order="F")
+    #F = Vt[-1].reshape(3, 3)
 
-    # TODO 2.4 Enforce Rank(F) = 2
+    # Enforce Rank(F) = 2
     # - Compute the SVD of F
-    # - Set sigma3 to 0  (Hint: The singular values are stored as a vector in svd.w)
+    # - Set sigma3 to 0
     # - Recompute F with the updated sigma
     # - Normalize F and store in fundamental matrix
+    U, S, Vt = np.linalg.svd(F)
+    S[2] = 0
+    F = U @ np.diag(S) @ Vt
+    F /= F[2, 2]
 
-    raise NotImplemented
+    return F
+
 
 def compute_F_ransac(points1: t_points, points2: t_points, distance_threshold: float = 4.0, steps: int = 1000,
                      n_points: int = 8) -> Tuple[np.array, np.array]:
@@ -166,7 +188,6 @@ def compute_F_ransac(points1: t_points, points2: t_points, distance_threshold: f
     return best_homography, np.array(best_inlier_indices)
 
 
-# student function
 def triangulate(P1: t_view, P2: t_view, p1: t_points, p2: t_points) -> np.array:
     """Projects a point from it's location in the two images to "real-world" 3D coordinates.
 
@@ -179,14 +200,21 @@ def triangulate(P1: t_view, P2: t_view, p1: t_points, p2: t_points) -> np.array:
         resulting_point: A numpy array of shape [3] representing the point in 3D space
     """
     epsilon = .00000001 # avoiding division by zero
-    # TODO 3 Triangulation
-    # Step 1 - Construct the matrix A (~5 lines)
-    # Hint - homogenous solution - Zisserman Book page 312
-
-
-    # Step 2 - Extract the solution and project it back to real 3D (from homogenous space) (~4 lines)
     
-    raise NotImplemented    
+    # Triangulation
+    # Construct the matrix A
+    A = np.zeros((4, 4))
+    A[0] = p1[0] * P1[2] - P1[0]
+    A[1] = p1[1] * P1[2] - P1[1]
+    A[2] = p2[0] * P2[2] - P2[0]
+    A[3] = p2[1] * P2[2] - P2[1]
+
+    # Extract the solution and project it back to real 3D (from homogenous space)
+    _, _, Vt = np.linalg.svd(A)
+    X = Vt[-1]
+
+    X_3d = X[:3] / (X[3] + epsilon)
+    return X_3d
 
 
 def triangulate_all_points(View1: t_view, View2: t_view, K: t_view, points1: t_points, points2: t_points) \
@@ -220,7 +248,6 @@ def triangulate_all_points(View1: t_view, View2: t_view, K: t_view, points1: t_p
     return wps
 
 
-# student function
 def compute_essential_matrix(fundamental_matrix: t_homography, camera_parameters: t_camera_parameters) -> t_homography:
     """Computes the essential matrix given the fundamental matrix and the intrinsic camera parameters
 
@@ -231,12 +258,11 @@ def compute_essential_matrix(fundamental_matrix: t_homography, camera_parameters
     Returns:
         essential_matrix: A [3 x 3] numpy array representing the essential matrix
     """
-    # TODO 4.1: Calculate essential matrix (2 lines)
+    essential_matrix = camera_parameters.T @ fundamental_matrix @ camera_parameters
+    essential_matrix /= essential_matrix[2, 2]
+    return essential_matrix
 
-    raise NotImplemented
 
-
-# student function
 def decompose(E: t_homography) -> Tuple[np.array, np.array, np.array, np.array]:
     """Decomposes an essential matrix into the two rotation s and 2 translations that constitute it.
 
@@ -247,15 +273,22 @@ def decompose(E: t_homography) -> Tuple[np.array, np.array, np.array, np.array]:
         A tuple of R1, R2, t1, t2. R1, R2 are two rotation matrices of shape [3 x 3] and t1, t2 are two translation
             matrices of shape [3]
     """
-    # TODO 4.2 Calculating Rotation and translation matrices
+    # Calculating Rotation and translation matrices
+    # Compute the SVD E
+    U, _, Vt = np.linalg.svd(E)
 
-    # Step 1 - Compute the SVD E (~1 line)
+    # Compute W and Possible rotations
+    W = np.array([[0, -1, 0],
+                  [1, 0, 0],
+                  [0, 0, 1]])
+    R1 = U @ W @ Vt
+    R2 = U @ W.T @ Vt
 
-    # Step 2 - Compute W and Possible rotations (~3-6 lines)
+    # Possible translations and return R1, R2, t1, t2
+    t1 = U[:, 2] / np.linalg.norm(U[:, 2])
+    t2 = -U[:, 2] / np.linalg.norm(U[:, 2])
 
-    # Step 3 - Possible translations and return R1, R2, t1, t2 (~4 lines)
-
-    raise NotImplemented
+    return R1, R2, t1, t2
 
 
 def relativeTransformation(E: t_homography, points1: t_points, points2: t_points, K: t_camera_parameters) -> t_view:
