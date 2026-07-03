@@ -79,7 +79,12 @@ def extract_features(img: t_img, num_features: int = 500) -> Tuple[t_points, t_d
     # detect keypoints and compute feature descriptors
     kp, desc = orb.detectAndCompute(img, None)
 
-    return kp, desc
+    # convert cv2.KeyPoint list to [N x 2] numpy array of (x, y) coordinates
+    points = np.array([k.pt for k in kp], dtype=np.float32) if kp else np.empty((0, 2), dtype=np.float32)
+    if desc is None:
+        desc = np.empty((0, 32), dtype=np.uint8)
+
+    return points, desc
 
 
 def filter_and_align_descriptors(f1: Tuple[t_points, t_descriptors], f2: Tuple[t_points, t_descriptors],
@@ -251,7 +256,7 @@ def ransac(src_features: Tuple[t_points, t_descriptors], dst_features: Tuple[t_p
 
         # compare the current homography to the current best homography and update the best homography using
         # inlier count
-        count = _get_inlier_count(H, src_points, dst_points, distance_threshold)
+        count = _get_inlier_count(src_points, dst_points, H, distance_threshold)
         if count > best_count:
             best_count = count
             best_homography = H
@@ -340,13 +345,13 @@ def translate_homographies(homographies: t_homographies, dx: float, dy: float) -
     Returns:
         a copy of the homographies dict which maps the same keys to the translated matrices.
     """
-    # step 1: create a translation matrix (3 lines)
+    # create a translation matrix
+    T = np.eye(3)
+    T[0, 2] = dx
+    T[1, 2] = dy
 
-
-    # step 2: apply translation matrix on every homography matrix (2 lines)
-
-
-    raise NotImplementedError
+    # apply translation matrix on every homography matrix
+    return {k: T @ v for k, v in homographies.items()}
 
 
 def stitch_panorama(images: t_images, homographies: t_homographies, output_size: Tuple[int, int],
