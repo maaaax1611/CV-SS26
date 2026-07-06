@@ -3,7 +3,7 @@ sys.path.append(".")
 import pytest
 import numpy as np
 
-from ex4.util import computeBilinerWeights, computeGaussianWeights, invertMatrix2x2
+from utils import computeBilinerWeights, computeGaussianWeights, invertMatrix2x2
 
 epsilon = 1e-6
 

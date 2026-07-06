@@ -6,7 +6,6 @@ sys.path.append(".")
 
 
 from utils.opticalFlowLK import OpticalFlowLK
-from utils.util import *
 
 import numpy as np
 import cv2
