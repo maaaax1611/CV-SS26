@@ -107,7 +107,7 @@ def test_reconstruction(left_right_translation_ssim_mse):
     croped_dm_filtered = dm_filtered[:, left_crop:right_crop]  # unpadding the disparity map
     reconstructed_right = plot_disparity(left, croped_dm_filtered).astype(float) / 255.
     right = right.astype(float) / 255.
-    rgb_ssim = sum([structural_similarity(reconstructed_right[:, :, n], right[:, :, n]) for n in range(2)]) / 3
+    rgb_ssim = sum([structural_similarity(reconstructed_right[:, :, n], right[:, :, n], data_range=1.0) for n in range(2)]) / 3
     rgb_mse = sum([mean_squared_error(reconstructed_right[:, :, n], right[:, :, n]) for n in range(2)]) / 3
     assert rgb_ssim > ssim
     assert rgb_mse < mse
